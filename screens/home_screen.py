@@ -84,7 +84,7 @@ class HomeScreen(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.scroll_area)
 
-        self.apply_styles()
+        self.setup_styles()
         self.adjust_layout()
 
     def create_button(self, text, target_index):
@@ -112,9 +112,9 @@ class HomeScreen(QWidget):
 
         return grid
 
-    def apply_styles(self):
-        """스타일시트 적용"""
-        self.setStyleSheet(
+    def setup_styles(self):
+        """기본 스타일 템플릿"""
+        self._base_style = (
             BASE_STYLESHEET
             + f"""
             QWidget#homeScreen {{
@@ -122,7 +122,6 @@ class HomeScreen(QWidget):
             }}
 
             QWidget#homeScreen QLabel#homeTitle {{
-                font-size: 200%;
                 font-weight: 800;
                 color: {config.COLOR_TEXT};
             }}
@@ -146,6 +145,27 @@ class HomeScreen(QWidget):
             max_width = int(width * 0.9)
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
+
+        self.update_dynamic_style(width)
+
+    def update_dynamic_style(self, width):
+        """화면 크기에 맞춰 텍스트 크기 조정"""
+        scale = width / 640
+        title_pct = min(220, max(140, int(200 * scale)))
+        button_pct = min(150, max(95, int(110 * scale)))
+
+        dynamic_style = f"""
+            QWidget#homeScreen QLabel#homeTitle {{
+                font-size: {title_pct}%;
+            }}
+
+            QPushButton#homeButton,
+            QWidget#homeScreen QPushButton#nowPlayingButton {{
+                font-size: {button_pct}%;
+            }}
+        """
+
+        self.setStyleSheet(self._base_style + dynamic_style)
 
         # Scale typography relative to width
         scale_factor = width / 640  # baseline reference width
