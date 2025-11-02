@@ -310,7 +310,7 @@ class PlayerScreen(QWidget):
 
             QWidget#playerScreen QPushButton[variant="roundSurface"] {{
                 background-color: rgba(255, 255, 255, 0.08);
-                border-radius: 28px;
+                border-radius: 18px;
             }}
 
             QWidget#playerScreen QPushButton[variant="roundSurface"]:hover {{
@@ -342,8 +342,8 @@ class PlayerScreen(QWidget):
         self.album_art.setFixedSize(art_size, art_size)
 
         # Control buttons adjust proportionally but stay compact
-        side_btn = min(max(48, int(art_size * 0.2)), 84)
-        center_btn = min(max(60, int(art_size * 0.26)), 96)
+        side_btn = min(max(36, int(art_size * 0.14)), 64)
+        center_btn = min(max(42, int(art_size * 0.18)), 76)
 
         self.prev_btn.setFixedSize(side_btn, side_btn)
         self.next_btn.setFixedSize(side_btn, side_btn)
@@ -371,11 +371,11 @@ class PlayerScreen(QWidget):
         if hasattr(self, "time_total"):
             scaling_config.append(("time", self.time_total, 10, 9))
         if hasattr(self, "prev_btn"):
-            scaling_config.append(("control_small", self.prev_btn, 18, 13))
+            scaling_config.append(("control_small", self.prev_btn, 15, 11))
         if hasattr(self, "next_btn"):
-            scaling_config.append(("control_small", self.next_btn, 18, 13))
+            scaling_config.append(("control_small", self.next_btn, 15, 11))
         if hasattr(self, "play_pause_btn"):
-            scaling_config.append(("control_primary", self.play_pause_btn, 24, 17))
+            scaling_config.append(("control_primary", self.play_pause_btn, 18, 14))
         if hasattr(self, "album_art"):
             scaling_config.append(("art", self.album_art, 52, 36))
 
@@ -396,8 +396,8 @@ class PlayerScreen(QWidget):
         subtitle_pt = applied_map.get("subtitle", [13])[0]
         caption_pt = applied_map.get("caption", [11])[0]
         time_pt = applied_map.get("time", [10])[0]
-        control_small_pt = applied_map.get("control_small", [18])[0]
-        control_primary_pt = applied_map.get("control_primary", [22])[0]
+        control_small_pt = applied_map.get("control_small", [15])[0]
+        control_primary_pt = applied_map.get("control_primary", [18])[0]
         art_pt = applied_map.get("art", [48])[0]
 
         back_vpad, back_hpad = scale_padding(
