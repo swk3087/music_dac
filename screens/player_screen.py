@@ -47,6 +47,7 @@ class PlayerScreen(QWidget):
 
         container = QWidget()
         self.scroll_area.setWidget(container)
+        self.scroll_container = container
 
         self.content_layout = QVBoxLayout(container)
         self.content_layout.setSpacing(20)
@@ -70,9 +71,12 @@ class PlayerScreen(QWidget):
         self.card.setObjectName("card")
         self.card.setFrameShape(QFrame.Shape.NoFrame)
 
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
         self.card_layout = QVBoxLayout(self.card)
         self.card_layout.setContentsMargins(28, 28, 28, 28)
         self.card_layout.setSpacing(18)
+        self.card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self.album_art = QLabel("🎧")
         self.album_art.setObjectName("albumArt")
@@ -83,6 +87,7 @@ class PlayerScreen(QWidget):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(6)
         info_layout.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.info_layout = info_layout
 
         self.track_name = QLabel("No track playing")
         self.track_name.setObjectName("trackTitle")
@@ -162,9 +167,12 @@ class PlayerScreen(QWidget):
         controls.addWidget(self.next_btn)
         controls.addStretch()
         self.card_layout.addLayout(controls)
+        self.controls_layout = controls
 
         self.content_layout.addWidget(self.card, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.content_layout.addStretch(1)
+        self.content_layout.setStretch(0, 1)
+        self.content_layout.setStretch(1, 0)
 
         root_layout = QVBoxLayout(self)
         root_layout.setContentsMargins(0, 0, 0, 0)
@@ -324,7 +332,7 @@ class PlayerScreen(QWidget):
         width = max(320, self.width())
         margin_side = max(10, int(width * 0.045))
         margin_top = max(6, int(width * 0.015))
-        margin_bottom = max(10, int(width * 0.04))
+        margin_bottom = max(10, int(width * 0.035))
         self.content_layout.setContentsMargins(margin_side, margin_top, margin_side, margin_bottom)
 
         if self.card:
@@ -332,30 +340,63 @@ class PlayerScreen(QWidget):
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
 
-        if hasattr(self, "back_btn"):
-            self.back_btn.setMinimumHeight(max(44, int(width * 0.08)))
-            self.back_btn.setMinimumWidth(max(120, int(width * 0.28)))
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
 
-        # Album art scales with available width
+        available_height = max(260, height - (margin_top + margin_bottom))
+
+        base_scale = compute_responsive_scale(width, height)
+        height_scale = available_height / 580.0
+        effective_scale = max(0.25, min(base_scale, height_scale))
+
+        self.content_layout.setSpacing(max(8, int(round(18 * effective_scale))))
+
+        if hasattr(self, "card_layout"):
+            card_margin = max(12, int(round(24 * effective_scale)))
+            self.card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
+            self.card_layout.setSpacing(max(6, int(round(16 * effective_scale))))
+
+        if hasattr(self, "info_layout"):
+            self.info_layout.setSpacing(max(3, int(round(6 * effective_scale))))
+
+        if hasattr(self, "controls_layout"):
+            self.controls_layout.setSpacing(max(6, int(round(14 * effective_scale))))
+
+        self.progress_slider.setFixedHeight(max(8, int(round(14 * effective_scale))))
+
+        if hasattr(self, "back_btn"):
+            self.back_btn.setMinimumHeight(max(36, int(round(64 * effective_scale))))
+            min_back_width = max(96, int(round(160 * effective_scale)))
+            max_back_width = max(120, int(width * 0.45))
+            self.back_btn.setMinimumWidth(min(min_back_width, max_back_width))
+
+        # Album art scales with available width and height
         art_base = self.card.width() if self.card.width() > 0 else width
-        art_size = max(160, min(320, int(art_base * 0.45)))
+        art_height_cap = max(90, int(available_height * 0.48))
+        base_art_width = min(int(art_base * 0.4), int(width * 0.42))
+        art_size = max(
+            72,
+            min(
+                int(round(240 * effective_scale)),
+                base_art_width,
+                art_height_cap,
+            ),
+        )
         self.album_art.setFixedSize(art_size, art_size)
 
         # Control buttons adjust proportionally but stay compact
-        side_btn = min(max(36, int(art_size * 0.14)), 64)
-        center_btn = min(max(42, int(art_size * 0.18)), 76)
+        side_btn = max(28, min(int(round(52 * effective_scale)), art_size - 12))
+        center_btn = max(32, min(int(round(64 * effective_scale)), art_size - 8))
 
         self.prev_btn.setFixedSize(side_btn, side_btn)
         self.next_btn.setFixedSize(side_btn, side_btn)
         self.play_pause_btn.setFixedSize(center_btn, center_btn)
 
-        current_height = self.height()
-        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
-        self.update_dynamic_style(width, height, art_size=art_size)
+        self.update_dynamic_style(width, height, art_size=art_size, scale_override=effective_scale)
 
-    def update_dynamic_style(self, width, height, art_size=None):
+    def update_dynamic_style(self, width, height, art_size=None, scale_override=None):
         """화면 크기에 맞춰 텍스트와 패딩 조정"""
-        scale = compute_responsive_scale(width, height)
+        scale = scale_override if scale_override is not None else compute_responsive_scale(width, height)
 
         scaling_config = []
         if hasattr(self, "back_btn"):

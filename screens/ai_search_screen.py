@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QFrame,
     QScrollArea,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 import config
@@ -22,6 +23,7 @@ from ui_styles import (
     BASE_STYLESHEET,
     apply_font_scaling,
     compute_responsive_scale,
+    compute_effective_scale,
     scale_padding,
 )
 
@@ -63,6 +65,7 @@ class AISearchScreen(QWidget):
 
         container = QWidget()
         self.scroll_area.setWidget(container)
+        self.scroll_container = container
 
         self.content_layout = QVBoxLayout(container)
         self.content_layout.setSpacing(20)
@@ -90,6 +93,7 @@ class AISearchScreen(QWidget):
         self.card = QFrame()
         self.card.setObjectName("card")
         self.card.setFrameShape(QFrame.Shape.NoFrame)
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.card_layout = QVBoxLayout(self.card)
         self.card_layout.setContentsMargins(24, 24, 24, 24)
@@ -416,7 +420,7 @@ class AISearchScreen(QWidget):
         width = max(320, self.width())
         margin_side = max(10, int(width * 0.045))
         margin_top = max(6, int(width * 0.015))
-        margin_bottom = max(10, int(width * 0.04))
+        margin_bottom = max(10, int(width * 0.035))
         self.content_layout.setContentsMargins(margin_side, margin_top, margin_side, margin_bottom)
 
         if self.card:
@@ -424,24 +428,65 @@ class AISearchScreen(QWidget):
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
 
-        button_height = max(42, int(width * 0.08))
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
+        available_height = max(320, height - (margin_top + margin_bottom))
+
+        effective_scale = compute_effective_scale(
+            width,
+            height,
+            available_height=available_height,
+            base_height=640,
+            min_scale=0.28,
+        )
+
+        self.content_layout.setSpacing(max(10, int(round(20 * effective_scale))))
+
+        if hasattr(self, "card_layout"):
+            card_margin = max(16, int(round(28 * effective_scale)))
+            card_spacing = max(10, int(round(18 * effective_scale)))
+            self.card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
+            self.card_layout.setSpacing(card_spacing)
+
+        if hasattr(self, "suggestions_grid"):
+            grid_spacing = max(8, int(round(14 * effective_scale)))
+            self.suggestions_grid.setHorizontalSpacing(grid_spacing)
+            self.suggestions_grid.setVerticalSpacing(grid_spacing)
+
+        search_field_height = max(36, int(round(54 * effective_scale)))
+        self.search_input.setMinimumHeight(search_field_height)
+
+        button_height = max(36, int(round(56 * effective_scale)))
         for btn in self.buttons:
             btn.setMinimumHeight(button_height)
 
-        if hasattr(self, "back_btn"):
-            self.back_btn.setMinimumWidth(max(90, int(width * 0.2)))
         if hasattr(self, "search_btn"):
-            self.search_btn.setMinimumWidth(max(120, int(width * 0.28)))
+            self.search_btn.setMinimumWidth(max(120, int(round(180 * effective_scale))))
+
         for btn in self.suggestion_buttons:
-            btn.setMinimumHeight(max(48, int(width * 0.085)))
+            btn.setMinimumHeight(max(40, int(round(58 * effective_scale))))
 
-        current_height = self.height()
-        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
-        self.update_dynamic_style(width, height)
+        if hasattr(self, "results_list"):
+            list_height = max(180, int(available_height * 0.35))
+            self.results_list.setMinimumHeight(list_height)
 
-    def update_dynamic_style(self, width, height):
+        if hasattr(self, "scroll_container"):
+            self.scroll_container.setMinimumHeight(available_height)
+            self.scroll_container.setMaximumHeight(available_height)
+
+        if self.card:
+            self.card.setMinimumHeight(available_height)
+            self.card.setMaximumHeight(available_height)
+
+        self.update_dynamic_style(width, height, scale_override=effective_scale)
+
+    def update_dynamic_style(self, width, height, scale_override=None):
         """화면 크기에 맞춰 글꼴 및 패딩 조정"""
-        scale = compute_responsive_scale(width, height)
+        scale = (
+            scale_override
+            if scale_override is not None
+            else compute_responsive_scale(width, height)
+        )
 
         scaling_config = []
         if hasattr(self, "title_label"):

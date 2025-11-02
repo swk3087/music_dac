@@ -222,8 +222,8 @@ BASE_STYLESHEET = f"""
 # Responsive scaling defaults
 RESPONSIVE_BASE_WIDTH = 640
 RESPONSIVE_BASE_HEIGHT = 480
-RESPONSIVE_MIN_SCALE = 0.35
-RESPONSIVE_MAX_SCALE = 1.1
+RESPONSIVE_MIN_SCALE = 0.3
+RESPONSIVE_MAX_SCALE = 1.35
 
 
 def compute_responsive_scale(
@@ -243,6 +243,47 @@ def compute_responsive_scale(
 
     aspect_scale = min(width_scale, height_scale)
     return max(min_scale, min(max_scale, aspect_scale))
+
+
+def compute_effective_scale(
+    width,
+    height,
+    available_height=None,
+    base_height=580,
+    min_scale=0.25,
+    max_scale=RESPONSIVE_MAX_SCALE,
+):
+    """
+    Combine width and height scaling to keep layouts visible.
+
+    Args:
+        width (int | float): Available width in pixels.
+        height (int | float): Available height in pixels.
+        available_height (int | float, optional): Usable content height after margins.
+        base_height (int | float): Reference height to compare against.
+        min_scale (float): Lower clamp for the resulting scale.
+        max_scale (float | None): Upper clamp; defaults to global max.
+    """
+    width = max(int(width), 1)
+    height = max(int(height), 1)
+
+    base_scale = compute_responsive_scale(
+        width,
+        height,
+        min_scale=min_scale,
+        max_scale=max_scale if max_scale is not None else RESPONSIVE_MAX_SCALE,
+    )
+
+    usable_height = available_height if available_height is not None else height
+    usable_height = max(int(usable_height), 1)
+    reference_height = max(int(base_height), 1)
+    height_scale = usable_height / float(reference_height)
+
+    combined = min(base_scale, height_scale)
+    if max_scale is not None:
+        combined = min(combined, max_scale)
+
+    return max(min_scale, combined)
 
 
 def apply_font_scaling(scaling_items, scale):

@@ -20,6 +20,7 @@ from ui_styles import (
     BASE_STYLESHEET,
     apply_font_scaling,
     compute_responsive_scale,
+    compute_effective_scale,
     scale_padding,
 )
 
@@ -46,6 +47,7 @@ class HomeScreen(QWidget):
 
         container = QWidget()
         self.scroll_area.setWidget(container)
+        self.scroll_container = container
 
         self.content_layout = QVBoxLayout(container)
         self.content_layout.setSpacing(14)
@@ -65,6 +67,7 @@ class HomeScreen(QWidget):
         self.card = QFrame()
         self.card.setObjectName("card")
         self.card.setFrameShape(QFrame.Shape.NoFrame)
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.card_layout = QVBoxLayout(self.card)
         self.card_layout.setContentsMargins(14, 14, 14, 14)
@@ -160,15 +163,53 @@ class HomeScreen(QWidget):
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
 
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
+        available_height = max(260, height - (margin_top + margin_bottom))
+
+        effective_scale = compute_effective_scale(
+            width,
+            height,
+            available_height=available_height,
+            base_height=560,
+            min_scale=0.25,
+        )
+
+        self.content_layout.setSpacing(max(8, int(round(16 * effective_scale))))
+
+        if hasattr(self, "card_layout"):
+            card_margin = max(12, int(round(20 * effective_scale)))
+            card_spacing = max(8, int(round(14 * effective_scale)))
+            self.card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
+            self.card_layout.setSpacing(card_spacing)
+
+        if hasattr(self, "button_grid"):
+            grid_spacing = max(6, int(round(12 * effective_scale)))
+            self.button_grid.setHorizontalSpacing(grid_spacing)
+            self.button_grid.setVerticalSpacing(grid_spacing)
+
+        if hasattr(self, "scroll_container"):
+            self.scroll_container.setMinimumHeight(available_height)
+            self.scroll_container.setMaximumHeight(available_height)
+
+        if self.card:
+            self.card.setMinimumHeight(available_height)
+            self.card.setMaximumHeight(available_height)
+
+        button_height = max(34, int(round(56 * effective_scale)))
+        for btn in self.buttons:
+            btn.setMinimumHeight(button_height)
+
+        if hasattr(self, "now_playing_btn"):
+            self.now_playing_btn.setMinimumHeight(max(38, int(round(60 * effective_scale))))
+
         # Switch to a single-column layout on very small screens for clarity
         breakpoint_width = 520
         desired_columns = 1 if width < breakpoint_width else 2
         if self._current_grid_columns != desired_columns:
             self.rebuild_button_grid(desired_columns)
 
-        current_height = self.height()
-        height = current_height if current_height > 0 else 480
-        self.update_dynamic_style(width, height)
+        self.update_dynamic_style(width, height, scale_override=effective_scale)
 
     def rebuild_button_grid(self, columns):
         """현재 그리드 버튼을 새 열 수에 맞게 재배치"""
@@ -196,9 +237,13 @@ class HomeScreen(QWidget):
 
         self._current_grid_columns = columns
 
-    def update_dynamic_style(self, width, height):
+    def update_dynamic_style(self, width, height, scale_override=None):
         """화면 크기와 비율에 맞춰 텍스트 크기 조정"""
-        scale = compute_responsive_scale(width, height)
+        scale = (
+            scale_override
+            if scale_override is not None
+            else compute_responsive_scale(width, height)
+        )
 
         scaling_config = []
         if hasattr(self, "title_label"):

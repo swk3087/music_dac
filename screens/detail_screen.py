@@ -13,6 +13,7 @@ from PyQt6.QtWidgets import (
     QListWidgetItem,
     QFrame,
     QScrollArea,
+    QSizePolicy,
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import config
@@ -20,6 +21,7 @@ from ui_styles import (
     BASE_STYLESHEET,
     apply_font_scaling,
     compute_responsive_scale,
+    compute_effective_scale,
     scale_padding,
 )
 
@@ -74,6 +76,7 @@ class DetailScreen(QWidget):
 
         container = QWidget()
         self.scroll_area.setWidget(container)
+        self.scroll_container = container
 
         self.content_layout = QVBoxLayout(container)
         self.content_layout.setSpacing(20)
@@ -103,6 +106,7 @@ class DetailScreen(QWidget):
         self.card = QFrame()
         self.card.setObjectName("card")
         self.card.setFrameShape(QFrame.Shape.NoFrame)
+        self.card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.card_layout = QVBoxLayout(self.card)
         self.card_layout.setContentsMargins(24, 24, 24, 24)
@@ -137,6 +141,7 @@ class DetailScreen(QWidget):
         tracks_layout = QVBoxLayout(tracks_section)
         tracks_layout.setContentsMargins(20, 20, 20, 20)
         tracks_layout.setSpacing(12)
+        self.tracks_layout = tracks_layout
 
         tracks_label = QLabel("Tracks")
         tracks_label.setObjectName("tracksLabel")
@@ -399,18 +404,58 @@ class DetailScreen(QWidget):
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
 
-        button_height = max(44, int(width * 0.085))
-        for btn in self.buttons:
-            btn.setMinimumHeight(button_height)
-            btn.setMinimumWidth(max(110, int(width * 0.24)))
-
         current_height = self.height()
         height = current_height if current_height > 0 else config.SCREEN_HEIGHT
-        self.update_dynamic_style(width, height)
+        available_height = max(360, height - (margin_top + margin_bottom))
 
-    def update_dynamic_style(self, width, height):
+        effective_scale = compute_effective_scale(
+            width,
+            height,
+            available_height=available_height,
+            base_height=680,
+            min_scale=0.3,
+        )
+
+        self.content_layout.setSpacing(max(10, int(round(20 * effective_scale))))
+
+        if hasattr(self, "card_layout"):
+            card_margin = max(18, int(round(28 * effective_scale)))
+            card_spacing = max(12, int(round(18 * effective_scale)))
+            self.card_layout.setContentsMargins(card_margin, card_margin, card_margin, card_margin)
+            self.card_layout.setSpacing(card_spacing)
+
+        if hasattr(self, "tracks_layout"):
+            section_margin = max(16, int(round(22 * effective_scale)))
+            section_spacing = max(10, int(round(16 * effective_scale)))
+            self.tracks_layout.setContentsMargins(section_margin, section_margin, section_margin, section_margin)
+            self.tracks_layout.setSpacing(section_spacing)
+
+        button_height = max(40, int(round(60 * effective_scale)))
+        for btn in self.buttons:
+            btn.setMinimumHeight(button_height)
+            btn.setMinimumWidth(max(110, int(round(190 * effective_scale))))
+
+        if hasattr(self, "tracks_list"):
+            list_height = max(240, int(available_height * 0.55))
+            self.tracks_list.setMinimumHeight(list_height)
+
+        if hasattr(self, "scroll_container"):
+            self.scroll_container.setMinimumHeight(available_height)
+            self.scroll_container.setMaximumHeight(available_height)
+
+        if self.card:
+            self.card.setMinimumHeight(available_height)
+            self.card.setMaximumHeight(available_height)
+
+        self.update_dynamic_style(width, height, scale_override=effective_scale)
+
+    def update_dynamic_style(self, width, height, scale_override=None):
         """화면 크기에 맞춰 글꼴 및 패딩 조정"""
-        scale = compute_responsive_scale(width, height)
+        scale = (
+            scale_override
+            if scale_override is not None
+            else compute_responsive_scale(width, height)
+        )
 
         scaling_config = []
         if hasattr(self, "title_label"):
