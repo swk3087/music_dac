@@ -18,7 +18,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, pyqtSignal, QThread
 import config
-from ui_styles import BASE_STYLESHEET
+from ui_styles import (
+    BASE_STYLESHEET,
+    apply_font_scaling,
+    compute_responsive_scale,
+    scale_padding,
+)
 
 
 class AISearchWorker(QThread):
@@ -77,6 +82,7 @@ class AISearchScreen(QWidget):
         title.setObjectName("aiTitle")
         title.setProperty("role", "title")
         header.addWidget(title)
+        self.title_label = title
 
         header.addStretch()
         self.content_layout.addLayout(header)
@@ -94,6 +100,7 @@ class AISearchScreen(QWidget):
         desc.setProperty("role", "caption")
         desc.setWordWrap(True)
         self.card_layout.addWidget(desc)
+        self.description_label = desc
 
         search_row = QHBoxLayout()
         search_row.setSpacing(12)
@@ -130,6 +137,7 @@ class AISearchScreen(QWidget):
         suggestions_label.setObjectName("suggestionsLabel")
         suggestions_label.setProperty("role", "subtitle")
         suggestions_layout.addWidget(suggestions_label)
+        self.suggestions_label = suggestions_label
 
         self.suggestions_grid = QGridLayout()
         self.suggestions_grid.setSpacing(12)
@@ -164,6 +172,7 @@ class AISearchScreen(QWidget):
         results_label.setObjectName("resultsLabel")
         results_label.setProperty("role", "subtitle")
         results_layout.addWidget(results_label)
+        self.results_label = results_label
 
         self.results_info = QLabel("Select an AI suggestion to see results.")
         self.results_info.setObjectName("resultsInfo")
@@ -186,7 +195,7 @@ class AISearchScreen(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.scroll_area)
 
-        self.apply_styles()
+        self.setup_styles()
         self.adjust_layout()
 
     def start_ai_search(self):
@@ -322,9 +331,9 @@ class AISearchScreen(QWidget):
         else:
             print("❌ No valid track URI")
 
-    def apply_styles(self):
-        """스타일 시트 적용"""
-        self.setStyleSheet(
+    def setup_styles(self):
+        """기본 스타일 템플릿 저장"""
+        self._base_style = (
             BASE_STYLESHEET
             + f"""
             QWidget#aiSearchScreen {{
@@ -332,15 +341,12 @@ class AISearchScreen(QWidget):
             }}
 
             QWidget#aiSearchScreen QLabel#aiTitle {{
-                font-size: 210%;
                 font-weight: 820;
                 color: {config.COLOR_TEXT};
             }}
 
             QWidget#aiSearchScreen QPushButton#suggestionButton {{
                 text-align: left;
-                padding: 1em;
-                font-size: 105%;
                 font-weight: 600;
             }}
 
@@ -356,7 +362,6 @@ class AISearchScreen(QWidget):
             }}
 
             QWidget#aiSearchScreen QListWidget#resultsList {{
-                font-size: 105%;
                 line-height: 1.45em;
             }}
 
@@ -402,6 +407,118 @@ class AISearchScreen(QWidget):
         for btn in self.suggestion_buttons:
             btn.setMinimumHeight(max(48, int(width * 0.085)))
 
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
+        self.update_dynamic_style(width, height)
+
+    def update_dynamic_style(self, width, height):
+        """화면 크기에 맞춰 글꼴 및 패딩 조정"""
+        scale = compute_responsive_scale(width, height)
+
+        scaling_config = []
+        if hasattr(self, "title_label"):
+            scaling_config.append(("title", self.title_label, 20, 12))
+        if hasattr(self, "description_label"):
+            scaling_config.append(("body", self.description_label, 12, 9))
+        if hasattr(self, "suggestions_label"):
+            scaling_config.append(("subtitle", self.suggestions_label, 15, 11))
+        if hasattr(self, "results_label"):
+            scaling_config.append(("subtitle", self.results_label, 15, 11))
+        if hasattr(self, "results_info"):
+            scaling_config.append(("caption", self.results_info, 11, 9))
+        if hasattr(self, "loading_label"):
+            scaling_config.append(("caption", self.loading_label, 11, 9))
+        if hasattr(self, "search_input"):
+            scaling_config.append(("input", self.search_input, 12, 10))
+        if hasattr(self, "results_list"):
+            scaling_config.append(("list", self.results_list, 11, 9))
+
+        scaling_config.extend(("button", btn, 12, 9) for btn in self.buttons)
+
+        applied_sizes = apply_font_scaling(
+            [(item[1], item[2], item[3]) for item in scaling_config],
+            scale,
+        )
+
+        applied_map = {}
+        for config_item, size in zip(scaling_config, applied_sizes):
+            role = config_item[0]
+            if size is None:
+                continue
+            applied_map.setdefault(role, []).append(size)
+
+        title_pt = applied_map.get("title", [16])[0]
+        body_pt = applied_map.get("body", [11])[0]
+        subtitle_pt = applied_map.get("subtitle", [13])[0]
+        caption_pt = applied_map.get("caption", [10])[0]
+        input_pt = applied_map.get("input", [11])[0]
+        list_pt = applied_map.get("list", [11])[0]
+        button_pt = applied_map.get("button", [11])[0]
+
+        button_vpad, button_hpad = scale_padding(
+            base_vertical=14,
+            base_horizontal=20,
+            scale=scale,
+            min_vertical=6,
+            min_horizontal=10,
+        )
+
+        suggestion_vpad, suggestion_hpad = scale_padding(
+            base_vertical=16,
+            base_horizontal=22,
+            scale=scale,
+            min_vertical=8,
+            min_horizontal=12,
+        )
+
+        input_vpad, input_hpad = scale_padding(
+            base_vertical=14,
+            base_horizontal=18,
+            scale=scale,
+            min_vertical=6,
+            min_horizontal=12,
+        )
+
+        dynamic_style = f"""
+            QWidget#aiSearchScreen QLabel#aiTitle {{
+                font-size: {title_pt}pt;
+            }}
+
+            QWidget#aiSearchScreen QLabel#descriptionLabel {{
+                font-size: {body_pt}pt;
+            }}
+
+            QWidget#aiSearchScreen QLabel#suggestionsLabel,
+            QWidget#aiSearchScreen QLabel#resultsLabel {{
+                font-size: {subtitle_pt}pt;
+            }}
+
+            QWidget#aiSearchScreen QLabel#resultsInfo,
+            QWidget#aiSearchScreen QLabel#loadingLabel {{
+                font-size: {caption_pt}pt;
+            }}
+
+            QWidget#aiSearchScreen QPushButton {{
+                font-size: {button_pt}pt;
+                padding: {button_vpad}px {button_hpad}px;
+            }}
+
+            QWidget#aiSearchScreen QPushButton#suggestionButton {{
+                padding: {suggestion_vpad}px {suggestion_hpad}px;
+            }}
+
+            QLineEdit#aiSearchField {{
+                font-size: {input_pt}pt;
+                padding: {input_vpad}px {input_hpad}px;
+            }}
+
+            QWidget#aiSearchScreen QListWidget#resultsList {{
+                font-size: {list_pt}pt;
+            }}
+        """
+
+        self.setStyleSheet(self._base_style + dynamic_style)
+
     def resizeEvent(self, event):
         """창 크기 변경 대응"""
         super().resizeEvent(event)
@@ -411,6 +528,7 @@ class AISearchScreen(QWidget):
         """화면 표시시 호출"""
         super().showEvent(event)
         self.search_input.setFocus()
+        self.adjust_layout()
 
     def hideEvent(self, event):
         """화면 숨김시 호출"""

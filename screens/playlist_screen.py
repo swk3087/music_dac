@@ -17,7 +17,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 import config
-from ui_styles import BASE_STYLESHEET
+from ui_styles import (
+    BASE_STYLESHEET,
+    apply_font_scaling,
+    compute_responsive_scale,
+    scale_padding,
+)
 
 
 class PlaylistLoadWorker(QThread):
@@ -76,6 +81,7 @@ class PlaylistScreen(QWidget):
         title.setObjectName("playlistTitle")
         title.setProperty("role", "title")
         header.addWidget(title)
+        self.title_label = title
 
         header.addStretch()
 
@@ -117,7 +123,7 @@ class PlaylistScreen(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.scroll_area)
 
-        self.apply_styles()
+        self.setup_styles()
         self.adjust_layout()
 
     def load_playlists(self):
@@ -177,9 +183,9 @@ class PlaylistScreen(QWidget):
             self.parent.detail_screen.load_playlist(playlist)
             self.parent.navigate_to(7)
 
-    def apply_styles(self):
-        """스타일 시트 적용"""
-        self.setStyleSheet(
+    def setup_styles(self):
+        """기본 스타일 템플릿 저장"""
+        self._base_style = (
             BASE_STYLESHEET
             + f"""
             QWidget#playlistScreen {{
@@ -187,13 +193,11 @@ class PlaylistScreen(QWidget):
             }}
 
             QWidget#playlistScreen QLabel#playlistTitle {{
-                font-size: 210%;
                 font-weight: 800;
                 color: {config.COLOR_TEXT};
             }}
 
             QWidget#playlistScreen QListWidget#playlistsList {{
-                font-size: 105%;
                 line-height: 1.5em;
             }}
 
@@ -237,6 +241,82 @@ class PlaylistScreen(QWidget):
         if hasattr(self, "refresh_btn"):
             self.refresh_btn.setMinimumWidth(max(90, int(width * 0.22)))
 
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
+        self.update_dynamic_style(width, height)
+
+    def update_dynamic_style(self, width, height):
+        """화면 크기에 맞춰 글꼴 및 패딩 조정"""
+        scale = compute_responsive_scale(width, height)
+
+        scaling_config = []
+        if hasattr(self, "title_label"):
+            scaling_config.append(("title", self.title_label, 20, 12))
+        if hasattr(self, "info_label"):
+            scaling_config.append(("caption", self.info_label, 11, 9))
+        if hasattr(self, "playlists_list"):
+            scaling_config.append(("list", self.playlists_list, 11, 9))
+
+        scaling_config.extend(("button", btn, 12, 9) for btn in self.buttons)
+
+        applied_sizes = apply_font_scaling(
+            [(item[1], item[2], item[3]) for item in scaling_config],
+            scale,
+        )
+
+        applied_map = {}
+        for config_item, size in zip(scaling_config, applied_sizes):
+            role = config_item[0]
+            if size is None:
+                continue
+            applied_map.setdefault(role, []).append(size)
+
+        title_pt = applied_map.get("title", [16])[0]
+        caption_pt = applied_map.get("caption", [10])[0]
+        list_pt = applied_map.get("list", [11])[0]
+        button_pt = applied_map.get("button", [11])[0]
+
+        button_vpad, button_hpad = scale_padding(
+            base_vertical=14,
+            base_horizontal=20,
+            scale=scale,
+            min_vertical=6,
+            min_horizontal=10,
+        )
+
+        item_vpad, item_hpad = scale_padding(
+            base_vertical=14,
+            base_horizontal=12,
+            scale=scale,
+            min_vertical=8,
+            min_horizontal=8,
+        )
+
+        dynamic_style = f"""
+            QWidget#playlistScreen QLabel#playlistTitle {{
+                font-size: {title_pt}pt;
+            }}
+
+            QWidget#playlistScreen QLabel#infoLabel {{
+                font-size: {caption_pt}pt;
+            }}
+
+            QWidget#playlistScreen QPushButton {{
+                font-size: {button_pt}pt;
+                padding: {button_vpad}px {button_hpad}px;
+            }}
+
+            QWidget#playlistScreen QListWidget#playlistsList {{
+                font-size: {list_pt}pt;
+            }}
+
+            QWidget#playlistScreen QListWidget#playlistsList::item {{
+                padding: {item_vpad}px {item_hpad}px;
+            }}
+        """
+
+        self.setStyleSheet(self._base_style + dynamic_style)
+
     def resizeEvent(self, event):
         """창 크기 변경 대응"""
         super().resizeEvent(event)
@@ -245,5 +325,6 @@ class PlaylistScreen(QWidget):
     def showEvent(self, event):
         """화면 표시시 자동 로드"""
         super().showEvent(event)
+        self.adjust_layout()
         if not self.playlists:
             self.load_playlists()

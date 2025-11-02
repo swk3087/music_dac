@@ -16,7 +16,12 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtCore import Qt, QTimer
 import config
-from ui_styles import BASE_STYLESHEET
+from ui_styles import (
+    BASE_STYLESHEET,
+    apply_font_scaling,
+    compute_responsive_scale,
+    scale_padding,
+)
 
 
 class PlayerScreen(QWidget):
@@ -27,6 +32,7 @@ class PlayerScreen(QWidget):
         self.parent = parent
         self.current_track = None
         self.is_playing = False
+        self.buttons = []
         self.setup_ui()
         self.setup_timer()
         
@@ -52,10 +58,11 @@ class PlayerScreen(QWidget):
         back_btn = QPushButton("← Back")
         back_btn.setProperty("variant", "ghost")
         back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        back_btn.setFixedWidth(170)
         back_btn.clicked.connect(self.parent.go_back)
+        back_btn.setObjectName("playerBackButton")
         header_layout.addWidget(back_btn)
         self.back_btn = back_btn
+        self.buttons.append(back_btn)
         header_layout.addStretch()
         self.content_layout.addLayout(header_layout)
 
@@ -147,6 +154,8 @@ class PlayerScreen(QWidget):
             btn.setMinimumSize(0, 0)
             btn.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
+        self.control_buttons = (self.prev_btn, self.play_pause_btn, self.next_btn)
+
         controls.addStretch()
         controls.addWidget(self.prev_btn)
         controls.addWidget(self.play_pause_btn)
@@ -161,7 +170,7 @@ class PlayerScreen(QWidget):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.scroll_area)
 
-        self.apply_styles()
+        self.setup_styles()
         self.adjust_layout()
 
         # Slider tracking
@@ -261,9 +270,9 @@ class PlayerScreen(QWidget):
         
         return f"{minutes}:{seconds:02d}"
     
-    def apply_styles(self):
-        """스타일시트 적용"""
-        self.setStyleSheet(
+    def setup_styles(self):
+        """기본 스타일 템플릿 저장"""
+        self._base_style = (
             BASE_STYLESHEET
             + f"""
             QWidget#playerScreen {{
@@ -271,7 +280,6 @@ class PlayerScreen(QWidget):
             }}
 
             QWidget#playerScreen QLabel#albumArt {{
-                font-size: 680%;
                 background: qradialgradient(
                     cx:0.5, cy:0.45, radius:0.9,
                     stop:0 rgba(102, 255, 224, 0.25),
@@ -279,17 +287,15 @@ class PlayerScreen(QWidget):
                 );
                 border-radius: 22px;
                 border: 1px solid rgba(255, 255, 255, 0.07);
-                padding: 2.4em;
+                color: {config.COLOR_TEXT};
             }}
 
             QWidget#playerScreen QLabel#trackTitle {{
-                font-size: 170%;
                 font-weight: 800;
             }}
 
             QWidget#playerScreen QLabel#artistLabel {{
                 color: {config.COLOR_TEXT_SECONDARY};
-                font-size: 120%;
             }}
 
             QWidget#playerScreen QLabel#albumLabel {{
@@ -305,15 +311,10 @@ class PlayerScreen(QWidget):
             QWidget#playerScreen QPushButton[variant="roundSurface"] {{
                 background-color: rgba(255, 255, 255, 0.08);
                 border-radius: 36px;
-                font-size: 165%;
             }}
 
             QWidget#playerScreen QPushButton[variant="roundSurface"]:hover {{
                 background-color: rgba(255, 255, 255, 0.18);
-            }}
-
-            QWidget#playerScreen QPushButton[variant="roundAccent"] {{
-                font-size: 210%;
             }}
             """
         )
@@ -333,6 +334,7 @@ class PlayerScreen(QWidget):
 
         if hasattr(self, "back_btn"):
             self.back_btn.setMinimumHeight(max(44, int(width * 0.08)))
+            self.back_btn.setMinimumWidth(max(120, int(width * 0.28)))
 
         # Album art scales with available width
         art_base = self.card.width() if self.card.width() > 0 else width
@@ -347,6 +349,107 @@ class PlayerScreen(QWidget):
         self.next_btn.setFixedSize(side_btn, side_btn)
         self.play_pause_btn.setFixedSize(center_btn, center_btn)
 
+        current_height = self.height()
+        height = current_height if current_height > 0 else config.SCREEN_HEIGHT
+        self.update_dynamic_style(width, height, art_size=art_size)
+
+    def update_dynamic_style(self, width, height, art_size=None):
+        """화면 크기에 맞춰 텍스트와 패딩 조정"""
+        scale = compute_responsive_scale(width, height)
+
+        scaling_config = []
+        if hasattr(self, "back_btn"):
+            scaling_config.append(("back", self.back_btn, 12, 9))
+        if hasattr(self, "track_name"):
+            scaling_config.append(("title", self.track_name, 18, 12))
+        if hasattr(self, "artist_name"):
+            scaling_config.append(("subtitle", self.artist_name, 14, 10))
+        if hasattr(self, "album_name"):
+            scaling_config.append(("caption", self.album_name, 11, 9))
+        if hasattr(self, "time_current"):
+            scaling_config.append(("time", self.time_current, 10, 9))
+        if hasattr(self, "time_total"):
+            scaling_config.append(("time", self.time_total, 10, 9))
+        if hasattr(self, "prev_btn"):
+            scaling_config.append(("control_small", self.prev_btn, 20, 14))
+        if hasattr(self, "next_btn"):
+            scaling_config.append(("control_small", self.next_btn, 20, 14))
+        if hasattr(self, "play_pause_btn"):
+            scaling_config.append(("control_primary", self.play_pause_btn, 26, 18))
+        if hasattr(self, "album_art"):
+            scaling_config.append(("art", self.album_art, 52, 36))
+
+        applied_sizes = apply_font_scaling(
+            [(item[1], item[2], item[3]) for item in scaling_config],
+            scale,
+        )
+
+        applied_map = {}
+        for config_item, size in zip(scaling_config, applied_sizes):
+            role = config_item[0]
+            if size is None:
+                continue
+            applied_map.setdefault(role, []).append(size)
+
+        back_pt = applied_map.get("back", [11])[0]
+        title_pt = applied_map.get("title", [16])[0]
+        subtitle_pt = applied_map.get("subtitle", [13])[0]
+        caption_pt = applied_map.get("caption", [11])[0]
+        time_pt = applied_map.get("time", [10])[0]
+        control_small_pt = applied_map.get("control_small", [18])[0]
+        control_primary_pt = applied_map.get("control_primary", [22])[0]
+        art_pt = applied_map.get("art", [48])[0]
+
+        back_vpad, back_hpad = scale_padding(
+            base_vertical=12,
+            base_horizontal=20,
+            scale=scale,
+            min_vertical=6,
+            min_horizontal=10,
+        )
+
+        art_dimension = art_size if art_size else max(200, int(240 * scale))
+        art_padding = max(12, int(round(art_dimension * 0.08)))
+
+        dynamic_style = f"""
+            QWidget#playerScreen QPushButton#playerBackButton {{
+                font-size: {back_pt}pt;
+                padding: {back_vpad}px {back_hpad}px;
+            }}
+
+            QWidget#playerScreen QLabel#trackTitle {{
+                font-size: {title_pt}pt;
+            }}
+
+            QWidget#playerScreen QLabel#artistLabel {{
+                font-size: {subtitle_pt}pt;
+            }}
+
+            QWidget#playerScreen QLabel#albumLabel {{
+                font-size: {caption_pt}pt;
+            }}
+
+            QWidget#playerScreen QLabel#timeCurrent,
+            QWidget#playerScreen QLabel#timeTotal {{
+                font-size: {time_pt}pt;
+            }}
+
+            QWidget#playerScreen QLabel#albumArt {{
+                font-size: {art_pt}pt;
+                padding: {art_padding}px;
+            }}
+
+            QWidget#playerScreen QPushButton[variant="roundSurface"] {{
+                font-size: {control_small_pt}pt;
+            }}
+
+            QWidget#playerScreen QPushButton[variant="roundAccent"] {{
+                font-size: {control_primary_pt}pt;
+            }}
+        """
+
+        self.setStyleSheet(self._base_style + dynamic_style)
+
     def resizeEvent(self, event):
         """창 크기 변경 대응"""
         super().resizeEvent(event)
@@ -357,3 +460,4 @@ class PlayerScreen(QWidget):
         super().showEvent(event)
         # Immediately update playback
         self.update_playback()
+        self.adjust_layout()

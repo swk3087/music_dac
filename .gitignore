@@ -6,3 +6,6 @@
 /venv
 /screens/__pycache__
 *.pyc
+linux
+/0.cache
+/0.env

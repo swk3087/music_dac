@@ -16,7 +16,12 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt
 
 import config
-from ui_styles import BASE_STYLESHEET
+from ui_styles import (
+    BASE_STYLESHEET,
+    apply_font_scaling,
+    compute_responsive_scale,
+    scale_padding,
+)
 
 
 class HomeScreen(QWidget):
@@ -26,6 +31,8 @@ class HomeScreen(QWidget):
         super().__init__()
         self.parent = parent
         self.buttons = []
+        self.grid_buttons = []
+        self._current_grid_columns = None
         self.setup_ui()
 
     def setup_ui(self):
@@ -51,6 +58,7 @@ class HomeScreen(QWidget):
         title.setObjectName("homeTitle")
         title.setProperty("role", "title")
         header_layout.addWidget(title)
+        self.title_label = title
 
         self.content_layout.addLayout(header_layout)
 
@@ -72,10 +80,12 @@ class HomeScreen(QWidget):
 
         button_grid = self.create_button_grid(button_specs, columns=2)
         self.card_layout.addLayout(button_grid)
+        self.button_grid = button_grid
 
         now_playing_btn = self.create_button("▶ Now Playing", 6)
         now_playing_btn.setObjectName("nowPlayingButton")
         self.card_layout.addWidget(now_playing_btn)
+        self.now_playing_btn = now_playing_btn
 
         self.content_layout.addWidget(self.card, alignment=Qt.AlignmentFlag.AlignHCenter)
         self.content_layout.addStretch(1)
@@ -102,13 +112,17 @@ class HomeScreen(QWidget):
         """버튼을 그리드 형태로 배치"""
         grid = QGridLayout()
         grid.setSpacing(8)
+        self.grid_buttons.clear()
 
         for index, (text, screen_index) in enumerate(buttons):
             button = self.create_button(text, screen_index)
             button.setMinimumHeight(0)
+            self.grid_buttons.append(button)
             row = index // columns
             col = index % columns
             grid.addWidget(button, row, col)
+
+        self._current_grid_columns = columns
 
         return grid
 
@@ -146,55 +160,98 @@ class HomeScreen(QWidget):
             self.card.setMaximumWidth(max_width)
             self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
 
-        self.update_dynamic_style(width)
+        # Switch to a single-column layout on very small screens for clarity
+        breakpoint_width = 520
+        desired_columns = 1 if width < breakpoint_width else 2
+        if self._current_grid_columns != desired_columns:
+            self.rebuild_button_grid(desired_columns)
 
-    def update_dynamic_style(self, width):
-        """화면 크기에 맞춰 텍스트 크기 조정"""
-        scale = width / 640
-        title_pct = min(220, max(140, int(200 * scale)))
-        button_pct = min(150, max(95, int(110 * scale)))
+        current_height = self.height()
+        height = current_height if current_height > 0 else 480
+        self.update_dynamic_style(width, height)
+
+    def rebuild_button_grid(self, columns):
+        """현재 그리드 버튼을 새 열 수에 맞게 재배치"""
+        if not hasattr(self, "button_grid") or not self.grid_buttons:
+            return
+
+        previous_columns = self._current_grid_columns or 0
+
+        # Remove existing widgets from the layout while preserving their parent
+        while self.button_grid.count():
+            item = self.button_grid.takeAt(0)
+            widget = item.widget()
+            if widget:
+                self.button_grid.removeWidget(widget)
+
+        # Re-add buttons with updated column count
+        for index, button in enumerate(self.grid_buttons):
+            row = index // columns
+            col = index % columns
+            self.button_grid.addWidget(button, row, col)
+
+        # Ensure the layout stretches evenly
+        for col in range(max(columns, previous_columns)):
+            self.button_grid.setColumnStretch(col, 1 if col < columns else 0)
+
+        self._current_grid_columns = columns
+
+    def update_dynamic_style(self, width, height):
+        """화면 크기와 비율에 맞춰 텍스트 크기 조정"""
+        scale = compute_responsive_scale(width, height)
+
+        scaling_config = []
+        if hasattr(self, "title_label"):
+            scaling_config.append(("title", self.title_label, 20, 10))
+
+        scaling_config.extend(("button", btn, 12, 9) for btn in self.buttons)
+
+        applied_sizes = apply_font_scaling(
+            [(item[1], item[2], item[3]) for item in scaling_config],
+            scale,
+        )
+
+        applied_map = {}
+        for entry, size in zip(scaling_config, applied_sizes):
+            role = entry[0]
+            if size is None:
+                continue
+            applied_map.setdefault(role, []).append(size)
+
+        title_pt = applied_map.get("title", [12])[0]
+        button_pt = applied_map.get("button", [11])[0]
+
+        vertical_padding, horizontal_padding = scale_padding(
+            base_vertical=14,
+            base_horizontal=20,
+            scale=scale,
+            min_vertical=6,
+            min_horizontal=10,
+        )
 
         dynamic_style = f"""
-            QWidget#homeScreen QLabel#homeTitle {{
-                font-size: {title_pct}%;
-            }}
-
-            QPushButton#homeButton,
-            QWidget#homeScreen QPushButton#nowPlayingButton {{
-                font-size: {button_pct}%;
-            }}
-        """
-
-        self.setStyleSheet(self._base_style + dynamic_style)
-
-        # Scale typography relative to width
-        scale_factor = width / 640  # baseline reference width
-        title_size = min(220, max(140, int(200 * scale_factor)))
-        button_font = min(140, max(100, int(110 * scale_factor)))
-
-        style_overrides = f"""
-            QLabel#homeTitle {{ font-size: {title_size}%; }}
-            QPushButton#homeButton {{ font-size: {button_font}%; }}
-        """
-        self.setStyleSheet(BASE_STYLESHEET + f"""
             QWidget#homeScreen {{
                 background: {config.GRADIENT_NIGHTFALL};
             }}
 
             QWidget#homeScreen QLabel#homeTitle {{
-                font-size: {title_size}%;
-                font-weight: 800;
+                font-size: {title_pt}pt;
                 color: {config.COLOR_TEXT};
+            }}
+
+            QPushButton#homeButton,
+            QWidget#homeScreen QPushButton#nowPlayingButton {{
+                font-size: {button_pt}pt;
+                padding: {vertical_padding}px {horizontal_padding}px;
             }}
 
             QWidget#homeScreen QPushButton#nowPlayingButton {{
                 text-align: center;
                 font-weight: 700;
-                font-size: {button_font}%;
             }}
+        """
 
-            QPushButton#homeButton {{ font-size: {button_font}%; }}
-        """ + style_overrides)
+        self.setStyleSheet(self._base_style + dynamic_style)
 
     def resizeEvent(self, event):
         """창 크기 변경 대응"""
@@ -204,3 +261,4 @@ class HomeScreen(QWidget):
     def showEvent(self, event):
         """화면이 표시될 때 호출"""
         super().showEvent(event)
+        self.adjust_layout()

@@ -2,6 +2,8 @@
 Shared UI style definitions for the Music DAC application.
 """
 
+from PyQt6.QtGui import QFont
+
 import config
 
 
@@ -216,3 +218,77 @@ BASE_STYLESHEET = f"""
         border-radius: 4px;
     }}
 """
+
+# Responsive scaling defaults
+RESPONSIVE_BASE_WIDTH = 640
+RESPONSIVE_BASE_HEIGHT = 480
+RESPONSIVE_MIN_SCALE = 0.35
+RESPONSIVE_MAX_SCALE = 1.1
+
+
+def compute_responsive_scale(
+    width,
+    height,
+    base_width=RESPONSIVE_BASE_WIDTH,
+    base_height=RESPONSIVE_BASE_HEIGHT,
+    min_scale=RESPONSIVE_MIN_SCALE,
+    max_scale=RESPONSIVE_MAX_SCALE,
+):
+    """Calculate a clamped scale factor based on available size."""
+    width = max(int(width), 1)
+    height = max(int(height), 1)
+
+    width_scale = width / float(base_width)
+    height_scale = height / float(base_height)
+
+    aspect_scale = min(width_scale, height_scale)
+    return max(min_scale, min(max_scale, aspect_scale))
+
+
+def apply_font_scaling(scaling_items, scale):
+    """
+    Apply responsive font sizes to a list of widgets.
+
+    Each item in scaling_items should be a tuple of (widget, base_pt, min_pt).
+    """
+    if not scaling_items:
+        return []
+
+    applied_sizes = []
+
+    for widget, base_pt, min_pt in scaling_items:
+        if widget is None:
+            applied_sizes.append(None)
+            continue
+
+        font = QFont(widget.font())
+        target_pt = max(min_pt, int(round(base_pt * scale)))
+        font.setPointSize(target_pt)
+        widget.setFont(font)
+        applied_sizes.append(target_pt)
+
+    return applied_sizes
+
+
+def scale_padding(
+    base_vertical,
+    base_horizontal,
+    scale,
+    min_vertical=6,
+    min_horizontal=10,
+    max_vertical=None,
+    max_horizontal=None,
+):
+    """Scale padding values and clamp to provided min/max bounds."""
+    vertical = int(round(base_vertical * scale))
+    horizontal = int(round(base_horizontal * scale))
+
+    if max_vertical is not None:
+        vertical = min(vertical, max_vertical)
+    if max_horizontal is not None:
+        horizontal = min(horizontal, max_horizontal)
+
+    vertical = max(min_vertical, vertical)
+    horizontal = max(min_horizontal, horizontal)
+
+    return vertical, horizontal
