@@ -1,0 +1,250 @@
+"""
+Artist Screen
+아티스트 목록 화면
+"""
+
+from PyQt6.QtWidgets import (
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QListWidget,
+    QLabel,
+    QListWidgetItem,
+    QFrame,
+    QScrollArea,
+    QSizePolicy,
+)
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+import config
+from ui_styles import BASE_STYLESHEET
+
+
+class ArtistLoadWorker(QThread):
+    """아티스트 로딩 Worker Thread"""
+
+    finished = pyqtSignal(list)
+
+    def __init__(self, spotify_manager):
+        super().__init__()
+        self.spotify = spotify_manager
+
+    def run(self):
+        artists = self.spotify.get_followed_artists()
+        self.finished.emit(artists)
+
+
+class ArtistScreen(QWidget):
+    """아티스트 화면 클래스"""
+
+    def __init__(self, parent):
+        super().__init__()
+        self.parent = parent
+        self.artists = []
+        self.worker = None
+        self.buttons = []
+        self.setup_ui()
+
+    def setup_ui(self):
+        """UI 구성"""
+        self.setObjectName("artistScreen")
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+
+        container = QWidget()
+        self.scroll_area.setWidget(container)
+
+        self.content_layout = QVBoxLayout(container)
+        self.content_layout.setSpacing(20)
+        self.content_layout.setContentsMargins(0, 0, 0, 0)
+
+        header = QHBoxLayout()
+        header.setSpacing(14)
+
+        back_btn = QPushButton("← Back")
+        back_btn.setProperty("variant", "ghost")
+        back_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        back_btn.clicked.connect(self.parent.go_back)
+        header.addWidget(back_btn)
+        self.buttons.append(back_btn)
+        self.back_btn = back_btn
+
+        title = QLabel("Followed Artists")
+        title.setObjectName("artistTitle")
+        title.setProperty("role", "title")
+        header.addWidget(title)
+
+        header.addStretch()
+
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setProperty("variant", "surface")
+        refresh_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_btn.clicked.connect(self.load_artists)
+        header.addWidget(refresh_btn)
+        self.buttons.append(refresh_btn)
+        self.refresh_btn = refresh_btn
+
+        self.content_layout.addLayout(header)
+
+        self.card = QFrame()
+        self.card.setObjectName("card")
+        self.card.setFrameShape(QFrame.Shape.NoFrame)
+
+        self.card_layout = QVBoxLayout(self.card)
+        self.card_layout.setContentsMargins(24, 24, 24, 24)
+        self.card_layout.setSpacing(16)
+
+        self.info_label = QLabel("Loading artists…")
+        self.info_label.setObjectName("infoLabel")
+        self.info_label.setProperty("role", "caption")
+        self.card_layout.addWidget(self.info_label)
+
+        self.artists_list = QListWidget()
+        self.artists_list.setObjectName("artistsList")
+        self.artists_list.setMinimumHeight(220)
+        self.artists_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.artists_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.artists_list.itemClicked.connect(self.open_artist)
+        self.card_layout.addWidget(self.artists_list)
+
+        self.content_layout.addWidget(self.card, alignment=Qt.AlignmentFlag.AlignHCenter)
+        self.content_layout.addStretch(1)
+
+        root_layout = QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.addWidget(self.scroll_area)
+
+        self.apply_styles()
+        self.adjust_layout()
+
+    def load_artists(self):
+        """아티스트 로드"""
+        self.info_label.setText("Loading artists…")
+        self.info_label.setStyleSheet(f"color: {config.COLOR_PRIMARY};")
+        self.artists_list.clear()
+
+        self.worker = ArtistLoadWorker(self.parent.spotify)
+        self.worker.finished.connect(self.display_artists)
+        self.worker.start()
+
+    def display_artists(self, artists):
+        """아티스트 표시"""
+        self.artists = artists or []
+        self.artists_list.clear()
+
+        if not self.artists:
+            self.info_label.setText("No followed artists found")
+            self.info_label.setStyleSheet(f"color: {config.COLOR_TEXT_SECONDARY};")
+            self.artists_list.addItem("You're not following any artists yet.")
+            return
+
+        self.info_label.setText(f"Following {len(self.artists)} artists")
+        self.info_label.setStyleSheet(f"color: {config.COLOR_TEXT_SECONDARY};")
+
+        for artist in self.artists:
+            if not artist:
+                continue
+
+            name = artist.get("name", "Unknown Artist")
+            genres = artist.get("genres", [])
+            genre_text = ", ".join(genres[:2]) if genres else "Various genres"
+
+            followers = artist.get("followers", {}).get("total", 0)
+            if followers >= 1_000_000:
+                followers_text = f"{followers / 1_000_000:.1f}M"
+            elif followers >= 1_000:
+                followers_text = f"{followers / 1_000:.1f}K"
+            else:
+                followers_text = str(followers)
+
+            popularity = artist.get("popularity", 0)
+
+            item_text = (
+                f"🎤 {name}\n   🎵 {genre_text}  ·  👥 {followers_text} followers  ·  ⭐ {popularity}% popular"
+            )
+
+            item = QListWidgetItem(item_text)
+            item.setData(Qt.ItemDataRole.UserRole, artist)
+            self.artists_list.addItem(item)
+
+    def open_artist(self, item):
+        """아티스트 열기"""
+        artist = item.data(Qt.ItemDataRole.UserRole)
+
+        if artist:
+            self.parent.detail_screen.load_artist(artist)
+            self.parent.navigate_to(7)
+
+    def apply_styles(self):
+        """스타일 시트 적용"""
+        self.setStyleSheet(
+            BASE_STYLESHEET
+            + f"""
+            QWidget#artistScreen {{
+                background: {config.GRADIENT_NIGHTFALL};
+            }}
+
+            QWidget#artistScreen QLabel#artistTitle {{
+                font-size: 210%;
+                font-weight: 800;
+                color: {config.COLOR_TEXT};
+            }}
+
+            QWidget#artistScreen QListWidget#artistsList {{
+                font-size: 105%;
+                line-height: 1.5em;
+            }}
+
+            QWidget#artistScreen QListWidget#artistsList::item {{
+                padding: 14px 12px;
+                border-radius: 12px;
+                margin: 2px 0;
+                border: 1px solid transparent;
+            }}
+
+            QWidget#artistScreen QListWidget#artistsList::item:selected {{
+                border-color: rgba(102, 255, 224, 0.35);
+                background-color: rgba(102, 255, 224, 0.18);
+            }}
+
+            QWidget#artistScreen QListWidget#artistsList::item:hover {{
+                background-color: rgba(255, 255, 255, 0.08);
+            }}
+            """
+        )
+
+    def adjust_layout(self):
+        """화면 크기에 따라 여백/카드 폭 조정"""
+        width = max(320, self.width())
+        margin_side = max(10, int(width * 0.045))
+        margin_top = max(6, int(width * 0.015))
+        margin_bottom = max(10, int(width * 0.04))
+        self.content_layout.setContentsMargins(margin_side, margin_top, margin_side, margin_bottom)
+
+        if self.card:
+            max_width = int(width * 0.94)
+            self.card.setMaximumWidth(max_width)
+            self.card.setMinimumWidth(min(max_width, width - (margin_side * 2)))
+
+        button_height = max(40, int(width * 0.085))
+        for btn in self.buttons:
+            btn.setMinimumHeight(button_height)
+
+        if hasattr(self, "back_btn"):
+            self.back_btn.setMinimumWidth(max(90, int(width * 0.22)))
+        if hasattr(self, "refresh_btn"):
+            self.refresh_btn.setMinimumWidth(max(90, int(width * 0.22)))
+
+    def resizeEvent(self, event):
+        """창 크기 변경 대응"""
+        super().resizeEvent(event)
+        self.adjust_layout()
+
+    def showEvent(self, event):
+        """화면 표시시 자동 로드"""
+        super().showEvent(event)
+        if not self.artists:
+            self.load_artists()

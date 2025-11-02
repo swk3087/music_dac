@@ -1,0 +1,4 @@
+PyQt6
+spotipy
+google-generativeai
+python-dotenv
