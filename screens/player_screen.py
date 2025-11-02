@@ -310,7 +310,7 @@ class PlayerScreen(QWidget):
 
             QWidget#playerScreen QPushButton[variant="roundSurface"] {{
                 background-color: rgba(255, 255, 255, 0.08);
-                border-radius: 36px;
+                border-radius: 28px;
             }}
 
             QWidget#playerScreen QPushButton[variant="roundSurface"]:hover {{
@@ -341,9 +341,9 @@ class PlayerScreen(QWidget):
         art_size = max(160, min(320, int(art_base * 0.45)))
         self.album_art.setFixedSize(art_size, art_size)
 
-        # Control buttons adjust proportionally
-        side_btn = max(56, int(art_size * 0.26))
-        center_btn = max(72, int(art_size * 0.32))
+        # Control buttons adjust proportionally but stay compact
+        side_btn = min(max(48, int(art_size * 0.2)), 84)
+        center_btn = min(max(60, int(art_size * 0.26)), 96)
 
         self.prev_btn.setFixedSize(side_btn, side_btn)
         self.next_btn.setFixedSize(side_btn, side_btn)
@@ -371,11 +371,11 @@ class PlayerScreen(QWidget):
         if hasattr(self, "time_total"):
             scaling_config.append(("time", self.time_total, 10, 9))
         if hasattr(self, "prev_btn"):
-            scaling_config.append(("control_small", self.prev_btn, 20, 14))
+            scaling_config.append(("control_small", self.prev_btn, 18, 13))
         if hasattr(self, "next_btn"):
-            scaling_config.append(("control_small", self.next_btn, 20, 14))
+            scaling_config.append(("control_small", self.next_btn, 18, 13))
         if hasattr(self, "play_pause_btn"):
-            scaling_config.append(("control_primary", self.play_pause_btn, 26, 18))
+            scaling_config.append(("control_primary", self.play_pause_btn, 24, 17))
         if hasattr(self, "album_art"):
             scaling_config.append(("art", self.album_art, 52, 36))
 

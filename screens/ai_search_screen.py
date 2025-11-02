@@ -235,20 +235,44 @@ class AISearchScreen(QWidget):
             self.results_info.setStyleSheet(f"color: {config.COLOR_ERROR};")
             return
 
-        self.current_suggestions = suggestions
+        normalized_suggestions = []
+        for item in suggestions:
+            if isinstance(item, dict):
+                raw_query = (
+                    item.get("query")
+                    or item.get("text")
+                    or item.get("title")
+                    or item.get("suggestion")
+                )
+                query = str(raw_query).strip() if raw_query else ""
+                raw_description = item.get("description") or item.get("details") or ""
+                description = str(raw_description).strip()
+                if query:
+                    normalized_suggestions.append({"query": query, "description": description})
+            elif isinstance(item, str):
+                query = item.strip()
+                if query:
+                    normalized_suggestions.append({"query": query, "description": ""})
+
+        if not normalized_suggestions:
+            self.results_info.setText("AI suggestions were invalid. Try again or refine your prompt.")
+            self.results_info.setStyleSheet(f"color: {config.COLOR_ERROR};")
+            return
+
+        self.current_suggestions = normalized_suggestions
         self.results_info.setText("Pick a suggestion to explore matching tracks.")
         self.results_info.setStyleSheet(f"color: {config.COLOR_TEXT_SECONDARY};")
 
-        for idx, suggestion in enumerate(suggestions):
+        for idx, suggestion in enumerate(normalized_suggestions):
             if idx >= len(self.suggestion_buttons):
                 break
 
-            text = suggestion.get("query", f"Suggestion {idx + 1}")
+            text = suggestion.get("query") or f"Suggestion {idx + 1}"
             btn = self.suggestion_buttons[idx]
             btn.setText(text)
             btn.show()
 
-        for idx in range(len(suggestions), len(self.suggestion_buttons)):
+        for idx in range(len(normalized_suggestions), len(self.suggestion_buttons)):
             self.suggestion_buttons[idx].hide()
 
     def select_suggestion(self, index):
@@ -257,14 +281,18 @@ class AISearchScreen(QWidget):
             return
 
         suggestion = self.current_suggestions[index]
-        query = suggestion.get("query")
+        if isinstance(suggestion, dict):
+            query = suggestion.get("query")
+            description = suggestion.get("description", "")
+        else:
+            query = str(suggestion).strip()
+            description = ""
 
         if not query:
             self.results_info.setText("Suggestion is missing a search query.")
             self.results_info.setStyleSheet(f"color: {config.COLOR_WARNING};")
             return
 
-        description = suggestion.get("description", "")
         if description:
             self.results_info.setText(f"Suggestion: {description}")
         else:

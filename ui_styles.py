@@ -131,10 +131,10 @@ BASE_STYLESHEET = f"""
             stop:0 {config.COLOR_ACCENT},
             stop:1 rgba(102, 255, 224, 0.2));
         color: #0E1117;
-        border-radius: 26px;
-        font-size: 240%;
-        min-width: 6.6em;
-        min-height: 6.6em;
+        border-radius: 22px;
+        font-size: 200%;
+        min-width: 4.8em;
+        min-height: 4.8em;
         text-align: center;
         padding: 0;
     }}
@@ -147,11 +147,11 @@ BASE_STYLESHEET = f"""
 
     QPushButton[variant="roundSurface"] {{
         background-color: rgba(255, 255, 255, 0.08);
-        border-radius: 24px;
+        border-radius: 22px;
         color: {config.COLOR_TEXT};
-        font-size: 180%;
-        min-width: 5.4em;
-        min-height: 5.4em;
+        font-size: 160%;
+        min-width: 4.2em;
+        min-height: 4.2em;
         text-align: center;
         padding: 0;
     }}
